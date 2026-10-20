@@ -1,0 +1,16 @@
+# SupportDesk -- intentionally vulnerable application (pedagogical use only)
+#
+# WARNING: the full monitoring stack (Wazuh + Prometheus + Grafana) requires
+# 8-12 GB of available RAM. Wazuh indexer (OpenSearch) alone needs ~4 GB heap.
+# Check your machine resources before starting the complete stack.
+# Wazuh can take 5-15 minutes to become fully operational after first start.
+
+services:
+  supportdesk:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - SESSION_SECRET=dev-secret-change-in-prod
+      - PORT=3000
+    restart: unless-stopped
