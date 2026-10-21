@@ -6,6 +6,7 @@ const db = require('./database/db')
 const seed = require('./database/seed')
 const { isAuthenticated } = require('./middleware/auth')
 const logger = require('./middleware/logger')
+const { register } = require('./middleware/metrics')
 
 const authRouter = require('./routes/auth')
 const ticketsRouter = require('./routes/tickets')
@@ -42,6 +43,11 @@ app.use('/tickets', ticketsRouter)
 app.use('/admin', adminRouter)
 app.use('/profile', profileRouter)
 app.use('/kb', kbRouter)
+
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+})
 
 app.get('/dashboard', isAuthenticated, (req, res) => {
   const user = {

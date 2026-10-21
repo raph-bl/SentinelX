@@ -9,7 +9,9 @@
 
 // Paths we never log: Prometheus scrape, static assets and browser source maps.
 // This keeps the signal clean for the false-positive measurement (see CONTRACT.md).
+
 const IGNORED = [/^\/metrics\b/, /^\/bootstrap\//, /\.map$/]
+const httpReq = require('./metrics') 
 
 function logger (req, res, next) {
   const startedAt = process.hrtime.bigint()
@@ -39,6 +41,7 @@ function logger (req, res, next) {
       duration_ms: Math.round(durationMs)
     }
 
+    httpRequests.inc({ method: req.method, status_code: res.statusCode, event_type })
     process.stdout.write(JSON.stringify(event) + '\n')
   })
 
@@ -115,7 +118,7 @@ function classify (req, res, endpoint) {
     }
   }
 
-  // --- Knowledge base ------------------------------------------------------
+  // --- Knowledge base @
   if (req.method === 'GET' && endpoint === '/kb/view') {
     return { event_type: 'kb_view', level: 'INFO', message: `User ${user} opened a KB document` }
   }
