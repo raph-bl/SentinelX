@@ -5,6 +5,7 @@ const path = require('path')
 const db = require('./database/db')
 const seed = require('./database/seed')
 const { isAuthenticated } = require('./middleware/auth')
+const logger = require('./middleware/logger')
 
 const authRouter = require('./routes/auth')
 const ticketsRouter = require('./routes/tickets')
@@ -33,6 +34,8 @@ app.use(session({
 }))
 
 app.get('/', (req, res) => res.redirect('/login'))
+
+app.use('/', logger)  
 
 app.use('/', authRouter)
 app.use('/tickets', ticketsRouter)
