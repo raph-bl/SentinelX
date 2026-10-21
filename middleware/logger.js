@@ -1,11 +1,15 @@
 // Logging middleware -- makes SupportDesk observable.
 //
-// Mount in app.js AFTER session + express.urlencoded, BEFORE the routers:
+// Mounted in app.js AFTER session + express.urlencoded, BEFORE the routers:
 //   app.use(require('./middleware/logger'))
 //
 // Emits ONE JSON line per request on stdout, following the schema in CONTRACT.md.
 // The event is built on response 'finish' so status_code, duration and the
-// redirect target are known.
+// redirect target (Location header) are known.
+
+// Paths we never log: Prometheus scrape, static assets and browser source maps.
+// This keeps the signal clean for the false-positive measurement (see CONTRACT.md).
+const IGNORED = [/^\/metrics\b/, /^\/bootstrap\//, /\.map$/]
 
 function logger (req, res, next) {
   const startedAt = process.hrtime.bigint()
@@ -14,32 +18,25 @@ function logger (req, res, next) {
   // is never modified by routers.
   const endpoint = req.originalUrl.split('?')[0]
 
+  if (IGNORED.some((re) => re.test(endpoint))) return next()
+
   res.on('finish', () => {
     const durationMs = Number(process.hrtime.bigint() - startedAt) / 1e6
-
-    // --- classify the business event ----------------------------------------
-      // TODO: decide the event_type from (method, path, status, redirect target).
-    //       Hard cases to handle here (see the route comments):
-    //         - auth_failure vs auth_success: login always returns 302, so you
-    //           must read res.getHeader('Location') (/login?error=1 vs /dashboard).
-    //         - ticket_export (IDOR): /tickets/:id/export returns 200; to be
-    //           detectable it needs requester identity + ticket owner together.
-    //         - server_error: status >= 500 (coordinate with the global handler).
     const { event_type, level, message } = classify(req, res, endpoint)
 
     const event = {
       timestamp: new Date().toISOString(),
-      level,                                   // TODO: derive INFO / WARN / ERROR
+      level,
       event_type,
-      source_ip: req.ip,                       // needs app.set('trust proxy', true)
+      source_ip: normalizeIp(req.ip),          // needs app.set('trust proxy', true)
       user: (req.session && req.session.username) || null,
       endpoint,                                // full path captured at entry
       method: req.method,
       status_code: res.statusCode,
       message,
-      query: req.query,                        // keep: SQLi / traversal payloads land here
-      body: redact(req.body),                  // TODO: mask password before logging
-      duration_ms: Math.round(durationMs)      // optional, useful for /metrics too
+      query: req.query,                        // SQLi / traversal payloads land here
+      body: redact(req.body),                  // password masked before logging
+      duration_ms: Math.round(durationMs)
     }
 
     process.stdout.write(JSON.stringify(event) + '\n')
@@ -49,55 +46,114 @@ function logger (req, res, next) {
 }
 
 // Map the request to a business event. Returns { event_type, level, message }.
-// TODO: implement the real logic + a sane default (e.g. http_request / INFO).
+// Ordered from most specific to most generic; first match wins.
 function classify (req, res, endpoint) {
+  const user = (req.session && req.session.username) || 'anonymous'
+
+  // Server errors take priority over whatever endpoint was hit.
+  if (res.statusCode >= 500) {
+    return { event_type: 'server_error', level: 'ERROR', message: `Server error on ${endpoint}` }
+  }
+
+  // --- Authentication ------------------------------------------------------
   if (req.method === 'POST' && endpoint === '/login') {
     const location = res.getHeader('Location') || ''
+    // Both outcomes return 302; only the redirect target distinguishes them.
     if (location.includes('/login')) {
       return {
         event_type: 'auth_failure',
         level: 'WARN',
-        message: `Failed login for ${req.body.email || 'unknown'}`
+        message: `Failed login for ${(req.body && req.body.email) || 'unknown'}`
       }
     }
     return {
       event_type: 'auth_success',
       level: 'INFO',
-      message: `Successful login for ${req.body.email || 'unknown'}`
+      message: `Successful login for ${(req.body && req.body.email) || 'unknown'}`
     }
   }
 
   if (req.method === 'GET' && endpoint === '/logout') {
-    return {
-      event_type: 'auth_logout',
-      level: 'INFO',
-      message: `User ${req.session.username || 'unknown'} logged out`
-    }
+    return { event_type: 'auth_logout', level: 'INFO', message: `User ${user} logged out` }
   }
 
+  // --- Tickets -------------------------------------------------------------
   if (req.method === 'GET' && endpoint === '/tickets') {
-    return {
-      event_type: 'ticket_list',
-      level: 'INFO',
-      message: `User ${req.session.username || 'unknown'} listed tickets`
-    }
+    return { event_type: 'ticket_list', level: 'INFO', message: `User ${user} listed tickets` }
   }
 
   if (req.method === 'POST' && endpoint === '/tickets/search') {
+    return { event_type: 'ticket_search', level: 'INFO', message: `User ${user} searched tickets` }
+  }
+
+  // Export has no ownership check (IDOR). Logging requester + ticket id lets a
+  // Wazuh rule flag a user exporting tickets in bulk / not their own.
+  const exportMatch = endpoint.match(/^\/tickets\/(\d+)\/export$/)
+  if (req.method === 'GET' && exportMatch) {
     return {
-      event_type: 'ticket_search',
+      event_type: 'ticket_export',
       level: 'INFO',
-      message: `User ${req.session.username || 'unknown'} searched tickets`
+      message: `User ${user} exported ticket #${exportMatch[1]}`
     }
   }
 
-  return { event_type: 'http_request', level: 'INFO', message: '' }
+  const commentMatch = endpoint.match(/^\/tickets\/(\d+)\/comment$/)
+  if (req.method === 'POST' && commentMatch) {
+    return {
+      event_type: 'ticket_comment',
+      level: 'INFO',
+      message: `User ${user} commented on ticket #${commentMatch[1]}`
+    }
+  }
+
+  const viewMatch = endpoint.match(/^\/tickets\/(\d+)$/)
+  if (req.method === 'GET' && viewMatch) {
+    return {
+      event_type: 'ticket_view',
+      level: 'INFO',
+      message: `User ${user} viewed ticket #${viewMatch[1]}`
+    }
+  }
+
+  // --- Knowledge base ------------------------------------------------------
+  if (req.method === 'GET' && endpoint === '/kb/view') {
+    return { event_type: 'kb_view', level: 'INFO', message: `User ${user} opened a KB document` }
+  }
+
+  // --- Admin ---------------------------------------------------------------
+  // Server-side fetch of an arbitrary URL (SSRF surface).
+  if (req.method === 'POST' && endpoint === '/admin/fetch') {
+    return { event_type: 'admin_fetch', level: 'WARN', message: `User ${user} triggered admin fetch` }
+  }
+
+  if (req.method === 'GET' && endpoint === '/admin') {
+    return { event_type: 'admin_view', level: 'INFO', message: `User ${user} opened admin panel` }
+  }
+
+  // --- Profile -------------------------------------------------------------
+  if (req.method === 'POST' && endpoint === '/profile') {
+    return { event_type: 'profile_update', level: 'INFO', message: `User ${user} updated profile` }
+  }
+
+  // --- Default -------------------------------------------------------------
+  const level = res.statusCode >= 400 ? 'WARN' : 'INFO'
+  return { event_type: 'http_request', level, message: '' }
 }
 
-// Remove or mask sensitive fields before they hit the logs.
-// TODO: at minimum redact body.password; decide on truncation / allow-list.
+// Mask sensitive fields before they hit the logs. Returns a shallow copy so the
+// original request body is left untouched.
 function redact (body) {
-  return body
+  if (!body || typeof body !== 'object') return body
+  const clone = { ...body }
+  if ('password' in clone) clone.password = '***'
+  return clone
+}
+
+// Docker gives IPv4-mapped IPv6 addresses like '::ffff:192.168.65.1'. Strip the
+// prefix so source_ip is a plain IPv4 that correlation rules can group on.
+function normalizeIp (ip) {
+  if (typeof ip === 'string' && ip.startsWith('::ffff:')) return ip.slice(7)
+  return ip
 }
 
 module.exports = logger
