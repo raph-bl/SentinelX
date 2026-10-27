@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | 0.1 (brouillon) |
+| **Version** | 0.2 (brouillon) |
 | **Statut** | ⚠️ À VALIDER par toute l'équipe avant toute instrumentation |
 | **Application** | SupportDesk (Node.js / Express, vues EJS, sessions, SQLite) |
 | **Dernière mise à jour** | 2026-10-20 |
@@ -13,9 +13,9 @@ Ce document fixe les décisions partagées entre la piste **instrumentation** (a
 
 | Membre | Rôle | Validé |
 |---|---|---|
-| _à compléter_ | _à compléter_ | ☐ |
-| _à compléter_ | _à compléter_ | ☐ |
-| _à compléter_ | _à compléter_ | ☐ |
+| Rapahel | Instrumentation | ☐ |
+| Tara| Détection | ☐ |
+| Flauréanne | Monitoring | ☐ |
 
 ---
 
@@ -184,9 +184,9 @@ Un seul `event_type` par ligne. **Première règle qui correspond, dans l'ordre 
 | SupportDesk | 3000 | 3000 |
 | Prometheus | 9090 | 9090 |
 | Grafana | 3000 | 3001 |
-| Wazuh dashboard | 5601 | 8443 |
-| Wazuh manager (agents / enrôlement / API) | 1514 / 1515 / 55000 | non exposés sauf besoin |
-| Wazuh indexer | 9200 | non exposé |
+| Wazuh dashboard | 5601 | 443 |
+| Wazuh manager (agents / enrôlement / API) | 1514 / 1515 / 514 / 55000 | 1514 / 1515 / 514 / 55000  |
+| Wazuh indexer | 9200 | 9200 |
 
 | Réseau | Services |
 |---|---|
@@ -196,6 +196,9 @@ Un seul `event_type` par ligne. **Première règle qui correspond, dans l'ordre 
 | Volume | Usage |
 |---|---|
 | `app-logs` | logs JSON de l'app, lus par Wazuh |
+| `prometheus_data` | Conservation de l'historique des métriques de performances |
+| `grafana_data` | Sauvegarde des utilisateurs et de la configuration de l'interface |
+| `wazuh-*` | Sauvegarde des alertes, configurations de détection, index de recherche |
 
 ---
 
@@ -219,11 +222,11 @@ Les secrets vivent dans `.env` (**non versionné**) ; `.env.example` (versionné
 | Livrable | Responsable |
 |---|---|
 | `middleware/logger.js` + gestionnaire d'erreurs d'`app.js` | _à compléter_ |
-| `/metrics` | _à compléter_ |
+| `/metrics` | Raphael |
 | Tests fonctionnels | _à compléter_ |
 | Déploiement Wazuh + règles | _à compléter_ |
-| Prometheus + Grafana | _à compléter_ |
-| docker-compose | _à compléter_ |
+| Prometheus + Grafana | Flauréanne |
+| docker-compose | Flauréanne |
 
 ---
 
@@ -242,3 +245,4 @@ Les secrets vivent dans `.env` (**non versionné**) ; `.env.example` (versionné
 | Version | Date | Changement |
 |---|---|---|
 | 0.1 | 2026-10-20 | Brouillon initial |
+| 0.2 | 2026-10-27 | Rajout des rôles, modification des ports |
