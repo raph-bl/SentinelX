@@ -6,7 +6,7 @@ const db = require('./database/db')
 const seed = require('./database/seed')
 const { isAuthenticated } = require('./middleware/auth')
 const logger = require('./middleware/logger')
-const { register } = require('./middleware/metrics')
+const { register, httpRequests } = require('./middleware/metrics')
 
 const authRouter = require('./routes/auth')
 const ticketsRouter = require('./routes/tickets')
@@ -37,6 +37,19 @@ app.use(session({
 app.get('/', (req, res) => res.redirect('/login'))
 
 app.use('/', logger)  
+
+app.use((req, res, next) => {
+  res.on('finish', () => {
+    if (httpRequests) {
+      httpRequests.inc({
+        method: req.method,
+        endpoint: req.route ? req.baseUrl + req.route.path : req.path,
+        status_code: res.statusCode
+      });
+    }
+  });
+  next();
+});
 
 app.use('/', authRouter)
 app.use('/tickets', ticketsRouter)
