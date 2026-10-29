@@ -10,11 +10,16 @@
 // Paths we never log: Prometheus scrape, static assets and browser source maps.
 // This keeps the signal clean for the false-positive measurement (see CONTRACT.md).
 const { httpRequests } = require('./metrics');
-
+const path = require('path')
 const IGNORED = [/^\/metrics\b/, /^\/bootstrap\//, /\.map$/]
-const httpReq = require('./metrics') 
+const httpReq = require('./metrics')
+const fs = require('fs')
+const LOG_FILE = process.env.LOG_FILE || '/var/log/supportdesk/app.log'
+const folder = path.dirname(LOG_FILE)
+fs.mkdirSync(folder, { recursive: true })
 
-function logger (req, res, next) {
+
+function logger(req, res, next) {
   const startedAt = process.hrtime.bigint()
   // Capture the full path NOW: req.path/req.url get stripped of the router mount
   // prefix (e.g. '/tickets') by the time the 'finish' event fires. originalUrl
@@ -44,14 +49,16 @@ function logger (req, res, next) {
 
     httpRequests.inc({ method: req.method, status_code: res.statusCode })
     process.stdout.write(JSON.stringify(event) + '\n')
+    fs.appendFileSync(LOG_FILE, JSON.stringify(event) + '\n')
   })
+
 
   next()
 }
 
 // Map the request to a business event. Returns { event_type, level, message }.
 // Ordered from most specific to most generic; first match wins.
-function classify (req, res, endpoint) {
+function classify(req, res, endpoint) {
   const user = (req.session && req.session.username) || 'anonymous'
 
   // Server errors take priority over whatever endpoint was hit.
@@ -146,7 +153,7 @@ function classify (req, res, endpoint) {
 
 // Mask sensitive fields before they hit the logs. Returns a shallow copy so the
 // original request body is left untouched.
-function redact (body) {
+function redact(body) {
   if (!body || typeof body !== 'object') return body
   const clone = { ...body }
   if ('password' in clone) clone.password = '***'
@@ -155,7 +162,7 @@ function redact (body) {
 
 // Docker gives IPv4-mapped IPv6 addresses like '::ffff:192.168.65.1'. Strip the
 // prefix so source_ip is a plain IPv4 that correlation rules can group on.
-function normalizeIp (ip) {
+function normalizeIp(ip) {
   if (typeof ip === 'string' && ip.startsWith('::ffff:')) return ip.slice(7)
   return ip
 }
