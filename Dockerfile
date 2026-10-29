@@ -2,7 +2,7 @@ FROM node:20-alpine
 RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm ci
 COPY . .
 RUN mkdir -p public/bootstrap/css public/bootstrap/js && \
     wget -qO public/bootstrap/css/bootstrap.min.css \

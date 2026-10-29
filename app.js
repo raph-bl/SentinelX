@@ -38,18 +38,19 @@ app.get('/', (req, res) => res.redirect('/login'))
 
 app.use('/', logger)  
 
-app.use((req, res, next) => {
-  res.on('finish', () => {
-    if (httpRequests) {
-      httpRequests.inc({
-        method: req.method,
-        endpoint: req.route ? req.baseUrl + req.route.path : req.path,
-        status_code: res.statusCode
-      });
-    }
-  });
-  next();
-});
+// Old prometheus metrics replaced by logger.js 
+// app.use((req, res, next) => {
+//   res.on('finish', () => {
+//     if (httpRequests) {
+//       httpRequests.inc({
+//         method: req.method,
+//         endpoint: req.route ? req.baseUrl + req.route.path : req.path,
+//         status_code: res.statusCode
+//       });
+//     }
+//   });
+//   next();
+// });
 
 app.use('/', authRouter)
 app.use('/tickets', ticketsRouter)
@@ -86,7 +87,10 @@ app.get('/dashboard', isAuthenticated, (req, res) => {
 app.use((err, req, res, next) => {
   res.status(500).send('Internal server error')
 })
+if (require.main == module) {
+  app.listen(PORT, () => {
+    console.log(`SupportDesk running on http://localhost:${PORT}`)
+  })
+}
 
-app.listen(PORT, () => {
-  console.log(`SupportDesk running on http://localhost:${PORT}`)
-})
+module.exports = app
