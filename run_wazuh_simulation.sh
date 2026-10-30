@@ -14,7 +14,7 @@ TARGET="${1:-http://localhost:3000}"
 # évite la fenêtre d'« ignore » de Wazuh qui supprime une alerte de corrélation
 # déjà déclenchée récemment pour la même IP.
 ATTACKER_IP="203.0.113.$(( RANDOM % 240 + 10 ))"
-BRUTE_N=12                           # nb de logins ratés (seuil brute force = 8/60s)
+BRUTE_N=15                           # nb de logins ratés (seuil brute force = 8/60s)
 JAR="$(mktemp)"
 trap 'rm -f "$JAR"' EXIT
 
@@ -68,10 +68,13 @@ echo "[*] Attente de l'ingestion par Wazuh (8s)..."
 sleep 8
 
 echo "== Alertes générées (IP $ATTACKER_IP) =="
-printf "  rule 100001 (auth_failure) : %s\n"  "$(count_alerts 100001)"
-printf "  rule 100002 (brute force)  : %s\n"  "$(count_alerts 100002)"
-printf "  rule 100010 (sql injection): %s\n"  "$(count_alerts 100010)"
+printf "  rule 100000 (auth_failure)        : %s\n"  "$(count_alerts 100000)"
+printf "  rule 100100 (brute force)         : %s\n"  "$(count_alerts 100100)"
+printf "  rule 100101 (login after bruteforce): %s\n" "$(count_alerts 100101)"
+printf "  rule 100200 (sql injection)       : %s\n"  "$(count_alerts 100200)"
+printf "  rule 100300 (path traversal)      : %s\n"  "$(count_alerts 100300)"
+printf "  rule 100301 (sensitive file read) : %s\n"  "$(count_alerts 100301)"
 echo
 echo "Détail : ./check_alerts.sh   (ou dashboard https://localhost:443)"
-echo "Note : 100010 (SQLi) et la future règle traversal ne se déclenchent qu'une"
-echo "       fois le Point 1 fait (query/body en strings plates dans les logs)."
+echo "Note : 100100 (brute force) est sensible au timing ; si 0, relancer. Si TOUT est à"
+echo "       0 alors que app.log se remplit -> logcollector décroché, 'docker compose restart wazuh.manager'."

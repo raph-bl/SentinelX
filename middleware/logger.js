@@ -14,6 +14,8 @@ const path = require('path')
 const IGNORED = [/^\/metrics\b/, /^\/bootstrap\//, /\.map$/]
 const fs = require('fs')
 const LOG_FILE = process.env.LOG_FILE || '/var/log/supportdesk/app.log'
+const LOG_BODY_MAX = parseInt(process.env.LOG_BODY_MAX, 10) || 1024
+const truncate = (s) => (s.length > LOG_BODY_MAX ? s.slice(0, LOG_BODY_MAX) : s)
 const folder = path.dirname(LOG_FILE)
 fs.mkdirSync(folder, { recursive: true })
 
@@ -31,6 +33,14 @@ function logger(req, res, next) {
     const { event_type, level, message } = classify(req, res, endpoint)
     const route = routePattern(endpoint)
 
+    // CONTRACT §3.1: flat object, strings only. §4.2: query/body logged RAW (no
+    // decoding) so attack patterns stay visible, then truncated to LOG_BODY_MAX.
+    const rawQuery = req.originalUrl.split('?')[1] || ''   // raw query string, not decoded
+    const bodyStr = req.body && Object.keys(req.body).length
+      ? JSON.stringify(redact(req.body))                   // password masked before logging
+      : ''
+    const userAgent = req.get('user-agent')
+
     const event = {
       timestamp: new Date().toISOString(),
       level,
@@ -41,10 +51,12 @@ function logger(req, res, next) {
       method: req.method,
       status_code: res.statusCode,
       message,
-      query: req.query,                        // SQLi / traversal payloads land here
-      body: redact(req.body),                  // password masked before logging
-      duration_ms: Math.round(durationMs)
+      response_time_ms: Math.round(durationMs)
     }
+    // Non-applicable fields are omitted (CONTRACT §3.1), except user (kept null above).
+    if (rawQuery) event.query = truncate(rawQuery)         // SQLi / traversal payloads land here
+    if (bodyStr) event.body = truncate(bodyStr)
+    if (userAgent) event.user_agent = userAgent
 
     httpRequests.inc({ method: req.method, route, status_code: res.statusCode })
     
@@ -88,7 +100,21 @@ function classify(req, res, endpoint) {
   }
 
   if (req.method === 'GET' && endpoint === '/logout') {
-    return { event_type: 'auth_logout', level: 'INFO', message: `User ${user} logged out` }
+    return { event_type: 'logout', level: 'INFO', message: `User ${user} logged out` }
+  }
+
+  // Access denied: explicit 403 (isAdmin), OR a 302 redirect to /login on a protected
+  // route (isAuthenticated bounced an unauthenticated request). CONTRACT §3.2 row 5.
+  // Placed before the endpoint-specific branches so a 403 on /admin is not logged as admin_view.
+  const location = res.getHeader('Location') || ''
+  const protectedPath = !['/', '/login', '/logout'].includes(endpoint)
+  if (res.statusCode === 403 ||
+      (res.statusCode === 302 && String(location).includes('/login') && protectedPath)) {
+    return {
+      event_type: 'access_denied',
+      level: 'WARN',
+      message: res.statusCode === 403 ? `Forbidden for ${user} on ${endpoint}` : `Unauthenticated access to ${endpoint}`
+    }
   }
 
   /***
@@ -131,8 +157,8 @@ function classify(req, res, endpoint) {
     }
   }
 
-  // Knowledge base 
-  if (req.method === 'GET' && endpoint === '/kb/view') {
+  // Knowledge base -- only a real view (200). A 404 falls through to not_found below.
+  if (req.method === 'GET' && endpoint === '/kb/view' && res.statusCode === 200) {
     return { event_type: 'kb_view', level: 'INFO', message: `User ${user} opened a KB document` }
   }
 
@@ -155,12 +181,16 @@ function classify(req, res, endpoint) {
     return { event_type: 'profile_update', level: 'INFO', message: `User ${user} updated profile` }
   }
 
+  // Not found (CONTRACT §3.2 row 13): any remaining 404, incl. /kb/view of a missing doc.
+  if (res.statusCode === 404) {
+    return { event_type: 'not_found', level: 'WARN', message: `Not found: ${endpoint}` }
+  }
+
   /***
    * Default
    ***/
-  
   const level = res.statusCode >= 400 ? 'WARN' : 'INFO'
-  return { event_type: 'http_request', level, message: '' }
+  return { event_type: 'http_request', level, message: 'HTTP request' }
 }
 
 // Mask sensitive fields before they hit the logs. Returns a shallow copy so the

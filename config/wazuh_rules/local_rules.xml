@@ -1,29 +1,77 @@
-<group name="supportdesk">
+<!--
+  Règles custom SupportDesk. IDs alignés sur les Attack Plans (attack_plans/).
+  Toutes les règles sont branchées sous la règle native 86600 (décodeur JSON Suricata)
+  via <if_sid>86600</if_sid> : nos logs ont 'timestamp' + 'event_type', donc 86600 les
+  capte en premier ; sans ce chaînage nos règles ne se déclencheraient jamais.
+-->
+<group name="supportdesk,">
 
-    <!-- Auth failure -->
-    <rule id="100001" level="5">
-        <if_sid>86600</if_sid>
-        <field name="event_type">^auth_failure$</field>
-        <description>SupportDesk: auth failed (user $(user))</description>
-        <mitre><id>T1110</id></mitre>
-    </rule>
+  <!-- ========================= Briques de base ========================= -->
+  <rule id="100000" level="5">
+    <if_sid>86600</if_sid>
+    <field name="event_type">^auth_failure$</field>
+    <description>SupportDesk: authentication failure (user $(user))</description>
+    <mitre><id>T1110</id></mitre>
+  </rule>
 
+  <rule id="100001" level="3">
+    <if_sid>86600</if_sid>
+    <field name="event_type">^server_error$</field>
+    <description>SupportDesk: server error (HTTP 5xx) on $(endpoint)</description>
+  </rule>
 
-    <!-- Brute force : 8 fails en 60 secs par la même IP -->
-    <rule id="100002" level="10" frequency="8" timeframe="60">
-        <if_matched_sid>100001</if_matched_sid>
-        <same_field>source_ip</same_field>
-        <description>SupportDesk: Brute-force auth depuis $(source_ip)</description>
-        <mitre><id>T1110</id></mitre>
-    </rule>
+  <!-- ===================== Scénario 01 : brute force ==================== -->
+  <!-- Plan 01 -- critère primaire : rule 100100, sévérité >= 10 -->
+  <rule id="100100" level="10" frequency="8" timeframe="60">
+    <if_matched_sid>100000</if_matched_sid>
+    <same_field>source_ip</same_field>
+    <description>SupportDesk: brute force -- 8+ auth_failure from same source_ip within 60s ($(source_ip))</description>
+    <mitre><id>T1110</id></mitre>
+  </rule>
 
-    <!-- SQL Injection -->
-    <rule id="100010" level="12">
-        <if_sid>86600</if_sid>
-        <field name="event_type">^ticket_search$</field>
-        <field name="body" type="pcre2">(?i)(union\s+select|\bor\b\s+1\s*=\s*1|--|')</field>
-        <description>SupportDesk: injection sql probable depuis (user $(user))</description>
-        <mitre><id>T1190</id></mitre>
-    </rule>
-    
+  <!-- Plan 01 -- critère secondaire : rule 100101, login réussi après brute force -->
+  <rule id="100101" level="12" timeframe="120">
+    <if_sid>86600</if_sid>
+    <if_matched_sid>100100</if_matched_sid>
+    <field name="event_type">^auth_success$</field>
+    <same_field>source_ip</same_field>
+    <description>SupportDesk: successful login after brute force ($(source_ip))</description>
+    <mitre><id>T1110</id></mitre>
+  </rule>
+
+  <!-- ==================== Scénario 02 : SQL injection =================== -->
+  <!-- Plan 02 -- critère primaire : rule 100200, sévérité >= 10 -->
+  <rule id="100200" level="12">
+    <if_sid>86600</if_sid>
+    <field name="event_type">^ticket_search$</field>
+    <field name="body" type="pcre2">(?i)(union\s+select|\bor\b\s+1\s*=\s*1|order\s+by|--|')</field>
+    <description>SupportDesk: SQL injection pattern in search body (user $(user))</description>
+    <mitre><id>T1190</id></mitre>
+  </rule>
+
+  <!-- Plan 02 -- critère secondaire : rule 100201, rafale de 500 (fuzzing d'injection) -->
+  <rule id="100201" level="7" frequency="6" timeframe="60">
+    <if_matched_sid>100001</if_matched_sid>
+    <same_field>source_ip</same_field>
+    <description>SupportDesk: spike of HTTP 500 from same source_ip -- possible injection fuzzing ($(source_ip))</description>
+    <mitre><id>T1190</id></mitre>
+  </rule>
+
+  <!-- =================== Scénario 03 : path traversal ================== -->
+  <!-- Plan 03 -- critère primaire : rule 100300, sévérité >= 10 -->
+  <rule id="100300" level="12">
+    <if_sid>86600</if_sid>
+    <field name="query" type="pcre2">(?i)(\.\.(/|%2f)|%2e%2e)</field>
+    <description>SupportDesk: path traversal pattern in query on $(endpoint)</description>
+    <mitre><id>T1083</id></mitre>
+  </rule>
+
+  <!-- Plan 03 -- critère secondaire : rule 100301, lecture de fichier sensible -->
+  <rule id="100301" level="12">
+    <if_sid>100300</if_sid>
+    <field name="query" type="pcre2">(?i)(supportdesk\.db|seed\.js|/etc/passwd|%2fetc%2fpasswd)</field>
+    <description>SupportDesk: sensitive file requested via traversal ($(endpoint))</description>
+    <mitre><id>T1005</id></mitre>
+  </rule>
+
 </group>
