@@ -1,0 +1,29 @@
+<group name="supportdesk">
+
+    <!-- Auth failure -->
+    <rule id="100001" level="5">
+        <if_sid>86600</if_sid>
+        <field name="event_type">^auth_failure$</field>
+        <description>SupportDesk: auth failed (user $(user))</description>
+        <mitre><id>T1110</id></mitre>
+    </rule>
+
+
+    <!-- Brute force : 8 fails en 60 secs par la même IP -->
+    <rule id="100002" level="10" frequency="8" timeframe="60">
+        <if_matched_sid>100001</if_matched_sid>
+        <same_field>source_ip</same_field>
+        <description>SupportDesk: Brute-force auth depuis $(source_ip)</description>
+        <mitre><id>T1110</id></mitre>
+    </rule>
+
+    <!-- SQL Injection -->
+    <rule id="100010" level="12">
+        <if_sid>86600</if_sid>
+        <field name="event_type">^ticket_search$</field>
+        <field name="body" type="pcre2">(?i)(union\s+select|\bor\b\s+1\s*=\s*1|--|')</field>
+        <description>SupportDesk: injection sql probable depuis (user $(user))</description>
+        <mitre><id>T1190</id></mitre>
+    </rule>
+    
+</group>
