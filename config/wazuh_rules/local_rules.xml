@@ -4,7 +4,7 @@
   via <if_sid>86600</if_sid> : nos logs ont 'timestamp' + 'event_type', donc 86600 les
   capte en premier ; sans ce chaînage nos règles ne se déclencheraient jamais.
 -->
-<group name="supportdesk,">
+<group name="supportdesk">
 
   <!-- ========================= Briques de base ========================= -->
   <rule id="100000" level="5">
@@ -31,7 +31,6 @@
 
   <!-- Plan 01 -- critère secondaire : rule 100101, login réussi après brute force -->
   <rule id="100101" level="12" timeframe="120">
-    <if_sid>86600</if_sid>
     <if_matched_sid>100100</if_matched_sid>
     <field name="event_type">^auth_success$</field>
     <same_field>source_ip</same_field>

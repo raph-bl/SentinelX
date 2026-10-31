@@ -114,7 +114,7 @@ def main():
     p.add_argument("--users", type=int, default=5, help="utilisateurs simultanés")
     p.add_argument("--seed", type=int, default=42, help="seed (reproductibilité)")
     p.add_argument("--output", default="", help="fichier CSV de log détaillé")
-    p.add_argument("--users-file", default="seed_users.json",
+    p.add_argument("--users-file", default="scripts/traffic/seed_users.json",
                     help="fichier JSON des comptes à simuler")
     a = p.parse_args()
 

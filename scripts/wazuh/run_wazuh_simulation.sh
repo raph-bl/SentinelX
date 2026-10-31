@@ -6,7 +6,7 @@
 # produit de vraies alertes visibles dans check_alerts.sh et le dashboard.
 #
 # Prérequis : la stack tourne (docker compose up -d) et l'app répond sur $TARGET.
-# Usage : ./run_wazuh_simulation.sh [cible]   (défaut http://localhost:3000)
+# Usage : ./scripts/wazuh/run_wazuh_simulation.sh [cible]   (défaut http://localhost:3000)
 
 set -u
 TARGET="${1:-http://localhost:3000}"
@@ -53,7 +53,7 @@ done
 
 # --- Scénario 3 : path traversal sur le lecteur KB -------------------------
 echo "[3] Path traversal : GET /kb/view?doc=../../..."
-for doc in "../../etc/passwd" "../../../supportdesk.db"; do
+for doc in "../../fichier.txt" "../../etc/passwd" "../../../supportdesk.db"; do
   curl -s -o /dev/null -b "$JAR" "${xff[@]}" \
     --get --data-urlencode "doc=$doc" "$TARGET/kb/view"
 done
