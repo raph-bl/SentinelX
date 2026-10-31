@@ -61,7 +61,7 @@ function logger(req, res, next) {
     httpRequests.inc({ method: req.method, route, status_code: res.statusCode })
     
     //!\\ a relire 
-    httpDuration.observe({ method: req.method, route}, durationMs / 1000)
+    httpDuration.observe({ method: req.method, route: route }, durationMs / 1000)
     appEvents.inc({ event_type })
     
     process.stdout.write(JSON.stringify(event) + '\n')
