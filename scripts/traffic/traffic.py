@@ -10,7 +10,7 @@ from pathlib import Path
 import requests
 
 SEARCH_TERMS = ["battery", "email", "phone", "access", "vpn", "screen"]
-KB_DOCS = ["vpn-guide", "password-policy", "badge-access-procedure"]
+KB_DOCS = ["vpn-guide.html", "password-policy.html", "badge-access-procedure.html"]
 COMMENTS = ["Merci, je regarde.", "Problème résolu de mon côté.", "Besoin d'infos supplémentaires."]
 
 stats = Counter()
@@ -91,7 +91,7 @@ def user_journey(user, ip, base, deadline, rng, path_csv):
                 req(s, "GET", f"/tickets/{rng.randint(1, 20)}", base, h, ip, path_csv)
             elif action == "search":
                 req(s, "POST", "/tickets/search", base, h, ip, path_csv,
-                    data={"q": rng.choice(SEARCH_TERMS)})
+                    data={"search": rng.choice(SEARCH_TERMS)})
             elif action == "comment":
                 req(s, "POST", f"/tickets/{rng.randint(1, 20)}/comment", base, h, ip, path_csv,
                     data={"content": rng.choice(COMMENTS)})
@@ -100,7 +100,7 @@ def user_journey(user, ip, base, deadline, rng, path_csv):
                     params={"doc": rng.choice(KB_DOCS)})
             elif action == "profile":
                 req(s, "POST", "/profile", base, h, ip, path_csv,
-                    data={"displayName": "Jean D.", "theme": rng.choice(["light", "dark"])})
+                    data={"display_name": "Jean D.", "theme": rng.choice(["light", "dark"])})
 
         pause(rng)
         req(s, "GET", "/logout", base, h, ip, path_csv)
