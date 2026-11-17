@@ -1,4 +1,4 @@
-<h1 align="center">🛡️ Sentinel X</h1>
+<h1 align="center">SentinelX</h1>
 
 <p align="center">
   <strong>An intentionally vulnerable web app, instrumented end to end,<br>
@@ -37,7 +37,6 @@
 - [Documentation](#documentation)
 - [Measured results](#measured-results)
 - [Known limitations](#known-limitations)
-- [Team](#team)
 
 ## The project in two minutes
 
@@ -298,13 +297,3 @@ They are owned and documented rather than hidden — details in [`docs/alert.md`
 - **The 0 % false positive rate is not representative**: synthetic traffic, 6 search terms with no special
   characters, a 10-minute window, a single seed.
 - **No rule has been fixed yet**, so there is no before/after measurement.
-
-## Team
-
-Epitech project **B-SPE-322 — Sentinel X** (`MPL-3-1`) · Tara-Nour Monteiro · Flauréanne Soldat · Raphaël Bertaina-Loichemol
-
-| Track | Owner |
-|---|---|
-| Detection (Wazuh, rules) | Tara-Nour Monteiro |
-| Monitoring (Prometheus, Grafana, Docker Compose) | Flauréanne Soldat |
-| Instrumentation (logs, `/metrics`) | Raphaël Bertaina-Loichemol |
