@@ -1,8 +1,8 @@
 <h1 align="center">🛡️ Sentinel X</h1>
 
 <p align="center">
-  <strong>Une application volontairement vulnérable, instrumentée de bout en bout,<br>
-  et la chaîne de détection qui la surveille.</strong>
+  <strong>An intentionally vulnerable web app, instrumented end to end,<br>
+  and the detection pipeline that watches it.</strong>
 </p>
 
 <p align="center">
@@ -12,47 +12,47 @@
   <img src="https://img.shields.io/badge/Prometheus-latest-E6522C?logo=prometheus&logoColor=white" alt="Prometheus">
   <img src="https://img.shields.io/badge/Grafana-latest-F46800?logo=grafana&logoColor=white" alt="Grafana">
   <img src="https://img.shields.io/badge/Docker%20Compose-ready-2496ED?logo=docker&logoColor=white" alt="Docker Compose">
-  <img src="https://img.shields.io/badge/tests-8%20passed-success" alt="8 tests">
-  <img src="https://img.shields.io/badge/couverture-78%25%20lignes-yellow" alt="Couverture 78%">
+  <img src="https://img.shields.io/badge/tests-8%20passing-success" alt="8 tests passing">
+  <img src="https://img.shields.io/badge/coverage-78%25%20lines-yellow" alt="78% line coverage">
 </p>
 
 ---
 
 > [!WARNING]
-> **SupportDesk est vulnérable par conception** (injection SQL, traversée de chemin, SSRF, mots de passe
-> en clair en base). Ce dépôt est un **laboratoire pédagogique**. Ne le déployez jamais sur une machine
-> exposée à Internet, et n'exécutez les scénarios d'attaque que contre votre instance locale.
+> **SupportDesk is vulnerable by design** (SQL injection, path traversal, SSRF, plaintext passwords in the
+> database). This repository is a **teaching lab**. Never deploy it on an internet-facing machine, and only
+> run the attack scenarios against your own local instance.
 
-## Sommaire
+## Table of contents
 
-- [Le projet en deux minutes](#le-projet-en-deux-minutes)
+- [The project in two minutes](#the-project-in-two-minutes)
 - [Architecture](#architecture)
-- [Démarrage rapide](#démarrage-rapide)
-- [Accès et comptes de démonstration](#accès-et-comptes-de-démonstration)
-- [Observabilité](#observabilité)
-- [Détection](#détection)
-- [Scénarios d'attaque](#scénarios-dattaque)
+- [Quick start](#quick-start)
+- [Access and demo accounts](#access-and-demo-accounts)
+- [Observability](#observability)
+- [Detection](#detection)
+- [Attack scenarios](#attack-scenarios)
 - [Tests](#tests)
-- [Structure du dépôt](#structure-du-dépôt)
+- [Repository layout](#repository-layout)
 - [Documentation](#documentation)
-- [Résultats mesurés](#résultats-mesurés)
-- [Limites connues](#limites-connues)
-- [Équipe](#équipe)
+- [Measured results](#measured-results)
+- [Known limitations](#known-limitations)
+- [Team](#team)
 
-## Le projet en deux minutes
+## The project in two minutes
 
-**SupportDesk** est un gestionnaire de tickets d'assistance interne (Node.js / Express / EJS / SQLite) qui
-contient des failles réalistes. Autour de lui, **Sentinel X** construit la chaîne complète d'un SOC miniature :
+**SupportDesk** is an internal helpdesk ticket manager (Node.js / Express / EJS / SQLite) that ships with
+realistic flaws. Around it, **Sentinel X** builds the full pipeline of a miniature SOC:
 
-1. **Instrumenter** — chaque requête produit une ligne de log JSON plate à schéma fermé (14 `event_type`),
-   et l'application expose ses métriques au format Prometheus sur `/metrics`.
-2. **Détecter** — Wazuh lit ces logs et applique 8 règles personnalisées mappées sur MITRE ATT&CK,
-   dont 3 règles de corrélation (brute force, rafale de 5xx, lecture de fichier sensible).
-3. **Mesurer** — un générateur de trafic légitime permet de calculer un **taux de faux positifs**,
-   et chaque scénario d'attaque est rejouable via un *attack plan* et son *runbook*.
+1. **Instrument** — every request emits a flat JSON log line drawn from a closed schema (14 `event_type`
+   values), and the app exposes Prometheus metrics on `/metrics`.
+2. **Detect** — Wazuh reads those logs and applies 8 custom rules mapped to MITRE ATT&CK, three of which
+   are correlation rules (brute force, 5xx burst, sensitive file read).
+3. **Measure** — a legitimate traffic generator makes it possible to compute a **false positive rate**, and
+   every attack scenario is replayable through an *attack plan* and its *runbook*.
 
-Le contrat technique entre la piste instrumentation et la piste détection est figé dans
-**[`CONTRACT.md`](CONTRACT.md)** : format de log, liste fermée des événements, métriques, ports, volumes.
+The technical contract between the instrumentation track and the detection track is frozen in
+**[`CONTRACT.md`](CONTRACT.md)**: log format, closed event list, metrics, ports, volumes.
 
 ## Architecture
 
@@ -65,7 +65,7 @@ flowchart LR
     end
 
     subgraph wazuh-net
-        WM["🔎 Wazuh manager<br/>règles + analysisd"]
+        WM["🔎 Wazuh manager<br/>rules + analysisd"]
         WI["🗄️ Wazuh indexer<br/><code>:9200</code>"]
         WD["🖥️ Wazuh dashboard<br/><code>:443</code>"]
     end
@@ -78,138 +78,138 @@ flowchart LR
     A -- "/metrics (15s)" --> P --> G
 ```
 
-| Flux | Chemin |
+| Pipeline | Path |
 |---|---|
-| **Détection** | `middleware/logger.js` → `/var/log/supportdesk/app.log` → volume `app-logs` → Wazuh logcollector → décodeur JSON (règle native `86600`) → `local_rules.xml` → `alerts.json` → dashboard |
-| **Performance** | `middleware/metrics.js` → `GET /metrics` → scrape Prometheus (15 s) → dashboard Grafana provisionné |
+| **Detection** | `middleware/logger.js` → `/var/log/supportdesk/app.log` → `app-logs` volume → Wazuh logcollector → JSON decoder (built-in rule `86600`) → `local_rules.xml` → `alerts.json` → dashboard |
+| **Performance** | `middleware/metrics.js` → `GET /metrics` → Prometheus scrape (15 s) → provisioned Grafana dashboard |
 
-## Démarrage rapide
+## Quick start
 
-### Prérequis
+### Requirements
 
 | | |
 |---|---|
-| Docker + Docker Compose | v2 (`docker compose`, sans tiret) |
-| RAM disponible | **8 à 12 Go** — l'indexer Wazuh (OpenSearch) réclame ~4 Go de heap à lui seul |
-| Ports libres sur l'hôte | `3000`, `3001`, `9090`, `9200`, `443`, `1514`, `1515`, `5140/udp`, `55000` |
+| Docker + Docker Compose | v2 (`docker compose`, no hyphen) |
+| Available RAM | **8 to 12 GB** — the Wazuh indexer (OpenSearch) alone wants ~4 GB of heap |
+| Free host ports | `3000`, `3001`, `9090`, `9200`, `443`, `1514`, `1515`, `5140/udp`, `55000` |
 
-### Lancement
+### Launch
 
 ```bash
 git clone https://github.com/raph-bl/SentinelX.git
 cd SentinelX
 
-cp .env.example .env     # puis remplacez tous les "change-me"
+cp .env.example .env     # then replace every "change-me"
 docker compose up -d --build
 ```
 
 > [!NOTE]
-> Wazuh met **5 à 15 minutes** à devenir pleinement opérationnel au premier démarrage.
-> Suivez la montée en charge avec `docker compose logs -f wazuh.manager`.
+> Wazuh takes **5 to 15 minutes** to become fully operational on first start.
+> Follow it with `docker compose logs -f wazuh.manager`.
 
-Pour ne lancer que l'application sans la stack de supervision :
+To run the application alone, without the monitoring stack:
 
 ```bash
 docker compose up -d --build supportdesk
 ```
 
-## Accès et comptes de démonstration
+## Access and demo accounts
 
-| Service | URL | Identifiants |
+| Service | URL | Credentials |
 |---|---|---|
-| SupportDesk | <http://localhost:3000> | voir ci-dessous |
-| Grafana | <http://localhost:3001> | `GRAFANA_USER` / `GRAFANA_PASSWORD` du `.env` |
+| SupportDesk | <http://localhost:3000> | see below |
+| Grafana | <http://localhost:3001> | `GRAFANA_USER` / `GRAFANA_PASSWORD` from `.env` |
 | Prometheus | <http://localhost:9090> | — |
-| Wazuh dashboard | <https://localhost> | `INDEXER_USERNAME` / `INDEXER_PASSWORD` du `.env` |
+| Wazuh dashboard | <https://localhost> | `INDEXER_USERNAME` / `INDEXER_PASSWORD` from `.env` |
 
-Comptes injectés par `database/seed.js` (mots de passe **stockés en clair**, c'est volontaire) :
+Accounts created by `database/seed.js` (passwords are **stored in plaintext**, which is deliberate):
 
-| Rôle | E-mail | Mot de passe |
+| Role | Email | Password |
 |---|---|---|
 | admin | `admin@supportdesk.local` | `Admin_123` |
 | admin | `helpdesk@supportdesk.local` | `Help_123` |
-| utilisateur | `jdupont@supportdesk.local` *(et 7 autres comptes)* | `User_123` |
+| user | `jdupont@supportdesk.local` *(and 7 more accounts)* | `User_123` |
 
-## Observabilité
+## Observability
 
-### Logs structurés
+### Structured logs
 
-Une ligne JSON plate par requête, UTF-8, sans objet imbriqué — directement digeste par le décodeur JSON
-de Wazuh. Le schéma complet est décrit dans [`CONTRACT.md` §3](CONTRACT.md).
+One flat JSON line per request, UTF-8, no nested objects — directly digestible by the Wazuh JSON decoder.
+The full schema lives in [`CONTRACT.md` §3](CONTRACT.md).
 
 ```json
 {"timestamp":"2026-10-20T14:32:11.423Z","level":"WARN","event_type":"auth_failure","source_ip":"203.0.113.42","user":"admin@example.com","endpoint":"/login","method":"POST","status_code":302,"message":"Login failed","body":"{\"email\":\"admin@example.com\",\"password\":\"***\"}","user_agent":"curl/8.5.0"}
 ```
 
-Règles de capture notables :
+Capture rules worth knowing:
 
-- **Liste fermée de 14 `event_type`** (`auth_failure`, `auth_success`, `access_denied`, `ticket_search`, `kb_view`, `server_error`…), un seul par ligne, première règle qui correspond.
-- **Les mots de passe sont masqués** (`***`) ; `query` et `body` sont en revanche journalisés **bruts**, sans décodage ni nettoyage, pour que les règles voient les motifs d'attaque.
-- `GET /metrics` n'est ni journalisé ni compté, afin de ne pas polluer les mesures avec le bruit du scraping.
+- **A closed list of 14 `event_type` values** (`auth_failure`, `auth_success`, `access_denied`, `ticket_search`, `kb_view`, `server_error`…), one per line, first matching rule wins.
+- **Passwords are masked** (`***`); `query` and `body`, on the other hand, are logged **raw**, with no decoding or sanitizing, so that the rules can see attack patterns.
+- `GET /metrics` is neither logged nor counted, to keep scrape noise out of the measurements.
 
-### Métriques
+### Metrics
 
-`GET /metrics` expose, via `prom-client` :
+`GET /metrics` exposes, via `prom-client`:
 
-| Métrique | Type | Labels |
+| Metric | Type | Labels |
 |---|---|---|
 | `http_requests_total` | counter | `method`, `route`, `status_code` |
 | `http_request_duration_seconds` | histogram | `method`, `route` |
 | `app_events_total` | counter | `event_type` |
-| `process_*`, `nodejs_*` | — | métriques Node par défaut |
+| `process_*`, `nodejs_*` | — | Node defaults |
 
-Le label `route` est toujours le **motif** de route (`/tickets/:id`, ou `unmatched`), jamais le chemin réel :
-pas d'explosion de cardinalité, et jamais d'IP, d'utilisateur ou de payload en label.
+The `route` label is always the route **pattern** (`/tickets/:id`, or `unmatched`), never the actual path:
+no cardinality explosion, and never an IP, a user or a payload in a label.
 
-Le dashboard Grafana (requêtes HTTP, tentatives d'authentification, durées) est provisionné automatiquement
-depuis `config/grafana/`.
+The Grafana dashboard (HTTP requests, authentication attempts, request durations) is provisioned
+automatically from `config/grafana/`.
 
-## Détection
+## Detection
 
-8 règles personnalisées dans [`config/wazuh_rules/local_rules.xml`](config/wazuh_rules/local_rules.xml),
-toutes chaînées sous la règle native `86600` et mappées sur MITRE ATT&CK.
+8 custom rules in [`config/wazuh_rules/local_rules.xml`](config/wazuh_rules/local_rules.xml), all chained
+under the built-in rule `86600` and mapped to MITRE ATT&CK.
 
-| ID | Niveau | Déclencheur | MITRE |
+| ID | Level | Trigger | MITRE |
 |---|:---:|---|---|
-| `100000` | 5 | `event_type = auth_failure` *(brique de base)* | T1110 |
-| `100001` | 3 | `event_type = server_error` *(brique de base)* | — |
-| `100100` | **10** | 8 `auth_failure` en 60 s depuis la même `source_ip` | T1110 |
-| `100101` | **12** | `auth_success` dans les 120 s suivant un `100100` | T1110 |
-| `100200` | **12** | motif d'injection SQL dans le `body` d'un `ticket_search` | T1190 |
-| `100201` | **7** | 6 `server_error` en 60 s depuis la même `source_ip` | T1190 |
-| `100300` | **12** | `../`, `..%2f` ou `%2e%2e` dans la `query` | T1083 |
-| `100301` | **12** | fichier sensible (`/etc/passwd`, `supportdesk.db`, `seed.js`) via `100300` | T1005 |
+| `100000` | 5 | `event_type = auth_failure` *(building block)* | T1110 |
+| `100001` | 3 | `event_type = server_error` *(building block)* | — |
+| `100100` | **10** | 8 `auth_failure` within 60 s from the same `source_ip` | T1110 |
+| `100101` | **12** | `auth_success` within 120 s of a `100100` | T1110 |
+| `100200` | **12** | SQL injection pattern in a `ticket_search` body | T1190 |
+| `100201` | **7** | 6 `server_error` within 60 s from the same `source_ip` | T1190 |
+| `100300` | **12** | `../`, `..%2f` or `%2e%2e` in the query string | T1083 |
+| `100301` | **12** | sensitive file (`/etc/passwd`, `supportdesk.db`, `seed.js`) via `100300` | T1005 |
 
-> Les règles `100000` et `100001` se déclenchent **par conception** à chaque faute de frappe ou erreur 500.
-> L'indicateur de qualité retenu par l'équipe ne compte donc que les alertes de **niveau ≥ 7**.
+> Rules `100000` and `100001` fire **by design** on every typo and every 500. The quality indicator the team
+> settled on therefore counts only alerts at **level ≥ 7**.
 
-### Vérifier les règles
+### Exercising the rules
 
 ```bash
-./scripts/wazuh/run_wazuh_tests.sh       # simulation via wazuh-logtest, sans attaque réelle
-./scripts/wazuh/run_wazuh_simulation.sh  # vrai trafic d'attaque -> vraies alertes
-./check_alerts.sh                        # suit alerts.log en direct
+./scripts/wazuh/run_wazuh_tests.sh       # wazuh-logtest simulation, no real attack
+./scripts/wazuh/run_wazuh_simulation.sh  # real attack traffic -> real alerts
+./check_alerts.sh                        # tail alerts.log live
 ```
 
-## Scénarios d'attaque
+## Attack scenarios
 
-Chaque scénario existe en deux documents : un **attack plan** (règles d'engagement, critères de succès,
-rédigé avant) et un **runbook** (trace reproductible, rédigé après exécution).
+Each scenario comes as two documents: an **attack plan** (rules of engagement, success criteria, written
+beforehand) and a **runbook** (reproducible trace, written after execution).
 
-| # | Scénario | Vulnérabilité réelle | Détection | Statut |
+| # | Scenario | Underlying flaw | Detection | Status |
 |---|---|---|---|---|
-| 01 | [Brute force sur `/login`](attack_plans/01-auth-bruteforce.md) | aucune limitation de débit sur l'authentification | `100100` / `100101` | ✅ `100100` confirmée en live |
-| 02 | [Injection SQL sur `/tickets/search`](attack_plans/02-sql-injection.md) | concaténation directe dans la clause `LIKE` (`routes/tickets.js`) | `100200` / `100201` | ✅ `100200` confirmée en live |
-| 03 | [Traversée de chemin sur `/kb/view`](attack_plans/03-path-traversal.md) | `path.join` sur un paramètre non validé (`routes/kb.js`) | `100300` / `100301` | ✅ `100301` confirmée en live |
+| 01 | [Brute force on `/login`](attack_plans/01-auth-bruteforce.md) | no rate limiting on authentication | `100100` / `100101` | ✅ `100100` confirmed live |
+| 02 | [SQL injection on `/tickets/search`](attack_plans/02-sql-injection.md) | direct concatenation into the `LIKE` clause (`routes/tickets.js`) | `100200` / `100201` | ✅ `100200` confirmed live |
+| 03 | [Path traversal on `/kb/view`](attack_plans/03-path-traversal.md) | `path.join` on an unvalidated parameter (`routes/kb.js`) | `100300` / `100301` | ✅ `100301` confirmed live |
 
-Runbooks correspondants : [`runbooks/01`](runbooks/01-auth-bruteforce.md) ·
+Matching runbooks: [`runbooks/01`](runbooks/01-auth-bruteforce.md) ·
 [`runbooks/02`](runbooks/02-sql-injection.md) · [`runbooks/03`](runbooks/03-path-traversal.md)
 
-### Mesurer les faux positifs
+### Measuring false positives
 
-`scripts/traffic/traffic.py` simule des utilisateurs légitimes (connexion → dashboard → tickets →
-recherches, commentaires, base de connaissances → déconnexion), avec une IP par utilisateur, une graine
-déterministe et un taux configurable de fautes de mot de passe.
+`scripts/traffic/traffic.py` simulates legitimate users (login → dashboard → tickets → searches, comments,
+knowledge base → logout), with one IP per user, a deterministic seed and a configurable rate of password
+typos.
 
 ```bash
 python3 scripts/traffic/traffic.py --duration 600 --users 5 --seed 42 --output run.csv
@@ -217,93 +217,94 @@ python3 scripts/traffic/traffic.py --duration 600 --users 5 --seed 42 --output r
 
 ## Tests
 
-Suite fonctionnelle de 8 cas (`node:test` + `supertest`) couvrant les endpoints critiques, **y compris le
-contenu des logs émis** : les tests 7 et 8 vérifient qu'un `POST /login` réussi et un `POST /login` échoué —
-deux `302` que seul l'en-tête `Location` distingue — sont bien classés en `auth_success` et `auth_failure`.
+A functional suite of 8 cases (`node:test` + `supertest`) covering the critical endpoints, **including the
+content of the emitted logs**: tests 7 and 8 assert that a successful and a failed `POST /login` — two
+`302` responses that only the `Location` header tells apart — are classified as `auth_success` and
+`auth_failure` respectively.
 
 ```bash
-./scripts/wazuh/run_tests.sh                            # avec couverture
-docker compose run --build --rm supportdesk npm test    # tests seuls
+./scripts/wazuh/run_tests.sh                            # with coverage
+docker compose run --build --rm supportdesk npm test    # tests only
 ```
 
 > [!IMPORTANT]
-> Les tests tournent **dans le conteneur** : `better-sqlite3` est un module natif compilé pour
-> `node:20-alpine`, pas pour le Node de l'hôte. Le drapeau `--build` est nécessaire, car
-> `docker compose run` ne reconstruit pas l'image et ignorerait vos modifications.
+> Tests run **inside the container**: `better-sqlite3` is a native module compiled for `node:20-alpine`,
+> not for the host's Node. The `--build` flag is required, since `docker compose run` does not rebuild the
+> image and would otherwise ignore your changes.
 
-Dernière exécution : **8 tests, 0 échec** — 78,16 % de lignes, 72,45 % de branches, 64,44 % de fonctions.
-La couverture est délibérément concentrée sur les composants de sécurité et d'observabilité
-(`logger`, `metrics`, `auth` : 84 à 100 % de lignes). Détail dans [`docs/tests.md`](docs/tests.md).
+Last run: **8 tests, 0 failures** — 78.16 % of lines, 72.45 % of branches, 64.44 % of functions.
+Coverage is deliberately concentrated on the security and observability components (`logger`, `metrics`,
+`auth`: 84 to 100 % of lines). Breakdown in [`docs/tests.md`](docs/tests.md).
 
-## Structure du dépôt
+## Repository layout
 
 ```
 .
-├── app.js                      # point d'entrée Express
+├── app.js                      # Express entry point
 ├── routes/                     # auth · tickets · kb · admin · profile
 ├── middleware/
-│   ├── logger.js               # journalisation JSON + classification des event_type
-│   ├── metrics.js              # compteurs et histogrammes Prometheus
-│   └── auth.js                 # garde de session et contrôle de rôle
-├── database/                   # schéma SQLite et seed
-├── views/ · public/            # vues EJS et assets Bootstrap
+│   ├── logger.js               # JSON logging + event_type classification
+│   ├── metrics.js              # Prometheus counters and histograms
+│   └── auth.js                 # session guard and role check
+├── database/                   # SQLite schema and seed
+├── views/ · public/            # EJS views and Bootstrap assets
 ├── config/
-│   ├── wazuh_rules/            # 👈 les 8 règles de détection
-│   ├── wazuh_cluster/          # ossec.conf (collecte de app.log)
-│   ├── prometheus/ · grafana/  # scrape et dashboards provisionnés
-│   └── credentials/            # mots de passe par défaut de la stack Wazuh
+│   ├── wazuh_rules/            # 👈 the 8 detection rules
+│   ├── wazuh_cluster/          # ossec.conf (app.log collection)
+│   ├── prometheus/ · grafana/  # scrape config and provisioned dashboards
+│   └── credentials/            # default passwords for the Wazuh stack
 ├── scripts/
-│   ├── wazuh/                  # tests de règles, simulation d'attaque, tests unitaires
-│   └── traffic/                # générateur de trafic légitime (mesure des FP)
-├── attack_plans/               # plans d'attaque (avant exécution)
-├── runbooks/                   # traces reproductibles (après exécution)
-├── docs/                       # qualification des alertes, tests
-├── tests/                      # suite fonctionnelle
-├── CONTRACT.md                 # 👈 contrat technique instrumentation ↔ détection
-├── docker-compose.yml          # app + Prometheus + Grafana (inclut wazuh/)
+│   ├── wazuh/                  # rule tests, attack simulation, unit tests
+│   └── traffic/                # legitimate traffic generator (FP measurement)
+├── attack_plans/               # attack plans (before execution)
+├── runbooks/                   # reproducible traces (after execution)
+├── docs/                       # alert qualification, tests
+├── tests/                      # functional suite
+├── CONTRACT.md                 # 👈 instrumentation ↔ detection technical contract
+├── docker-compose.yml          # app + Prometheus + Grafana (includes wazuh/)
 └── wazuh/docker-compose.yml    # manager + indexer + dashboard
 ```
 
 ## Documentation
 
-| Document | Contenu |
+| Document | Contents |
 |---|---|
-| [`CONTRACT.md`](CONTRACT.md) | Contrat technique : schéma de log, `event_type`, métriques, ports, volumes, variables d'environnement |
-| [`docs/alert.md`](docs/alert.md) | Rapport de qualification des alertes : protocole, taux de faux positifs, vrais et faux négatifs |
-| [`docs/tests.md`](docs/tests.md) | Stratégie de test et taux de couverture détaillé |
-| `attack_plans/` · `runbooks/` | Un plan et un runbook par scénario d'attaque |
+| [`CONTRACT.md`](CONTRACT.md) | Technical contract: log schema, `event_type` list, metrics, ports, volumes, environment variables |
+| [`docs/alert.md`](docs/alert.md) | Alert qualification report: protocol, false positive rate, true and false negatives |
+| [`docs/tests.md`](docs/tests.md) | Test strategy and detailed coverage figures |
+| `attack_plans/` · `runbooks/` | One plan and one runbook per attack scenario |
 
-## Résultats mesurés
+## Measured results
 
-Run de référence : **759 requêtes** de trafic normal (600 s, 5 utilisateurs simultanés, graine 42).
+Reference run: **759 requests** of normal traffic (600 s, 5 concurrent users, seed 42).
 
-| Indicateur | Valeur |
+| Indicator | Value |
 |---|---|
-| Taux de faux positifs, alertes de détection (niveau ≥ 7) | **0,00 %** |
-| Taux de faux positifs, toutes alertes confondues | 0,53 % (4 alertes `100000` = 4 fautes de mot de passe simulées) |
-| Vrais positifs confirmés en live | 3 scénarios sur 3 |
+| False positive rate, detection alerts (level ≥ 7) | **0.00 %** |
+| False positive rate, all alerts | 0.53 % (4 `100000` alerts = the 4 simulated password typos) |
+| True positives confirmed live | 3 scenarios out of 3 |
 
-## Limites connues
+## Known limitations
 
-Elles sont assumées et documentées, pas cachées — le détail est dans [`docs/alert.md`](docs/alert.md) §9.
+They are owned and documented rather than hidden — details in [`docs/alert.md`](docs/alert.md) §9.
 
-- **La règle `100200` est trop large.** Son motif accepte `'`, `--` et `order by` isolés : des recherches
-  légitimes (`wi-fi -- invité`, `order by date`) déclenchent une alerte de niveau 12. Faux positif confirmé.
-- **Un faux négatif est prouvé.** Une injection qui fait planter la requête (`x' union select 1,2,3--`)
-  renvoie un 500 : `classify()` la journalise en `server_error` avant d'atteindre la branche `ticket_search`,
-  donc `100200` ne la voit jamais. Correctif de fond : paramétrer la requête SQL dans `routes/tickets.js`.
-- **`source_ip` est falsifiable.** L'en-tête `X-Forwarded-For` est de confiance (`trust proxy`), ce qui
-  permet la rotation d'IP pour contourner les règles de corrélation.
-- **Le 0 % de faux positifs n'est pas représentatif** : trafic synthétique, 6 termes de recherche sans
-  caractère spécial, fenêtre de 10 minutes, une seule graine.
-- **Aucune règle n'a encore été corrigée** : il n'y a donc pas de mesure avant/après.
+- **Rule `100200` is too broad.** Its pattern accepts a bare `'`, `--` or `order by`, so legitimate searches
+  (`wi-fi -- guest`, `order by date`) raise a level 12 alert. Confirmed false positive.
+- **One false negative is proven.** An injection that crashes the query (`x' union select 1,2,3--`) returns a
+  500: `classify()` logs it as `server_error` before reaching the `ticket_search` branch, so `100200` never
+  sees it. The real fix is to parameterize the SQL query in `routes/tickets.js`.
+- **`source_ip` is spoofable.** The `X-Forwarded-For` header is trusted (`trust proxy`), which allows IP
+  rotation to slip past the correlation rules.
+- **The 0 % false positive rate is not representative**: synthetic traffic, 6 search terms with no special
+  characters, a 10-minute window, a single seed.
+- **No rule has been fixed yet**, so there is no before/after measurement.
 
-## Équipe
+## Team
 
-Projet Epitech **B-SPE-322 — Sentinel X** (`MPL-3-1`) · Tara-Nour Monteiro · Flauréanne Soldat · Raphaël Bertaina-Loichemol
+Epitech project **B-SPE-322 — Sentinel X** (`MPL-3-1`) · Tara-Nour Monteiro · Flauréanne Soldat · Raphaël Bertaina-Loichemol
 
-| Piste | Responsable |
+| Track | Owner |
 |---|---|
-| Détection (Wazuh, règles) | Tara-Nour Monteiro |
+| Detection (Wazuh, rules) | Tara-Nour Monteiro |
 | Monitoring (Prometheus, Grafana, Docker Compose) | Flauréanne Soldat |
 | Instrumentation (logs, `/metrics`) | Raphaël Bertaina-Loichemol |
